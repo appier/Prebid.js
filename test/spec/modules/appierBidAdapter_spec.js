@@ -1,6 +1,7 @@
 import { expect } from 'chai';
-import { spec, BIDDER_API_URL } from 'modules/appierBidAdapter';
+import { spec, API_SERVERS_MAP } from 'modules/appierBidAdapter';
 import { newBidder } from 'src/adapters/bidderFactory';
+import { config } from 'src/config';
 
 describe('AppierAdapter', function () {
   const adapter = newBidder(spec);
@@ -115,7 +116,7 @@ describe('AppierAdapter', function () {
         body: [fakeBidResult]
       };
 
-      let bidResponses = spec.interpretResponse(fakeServerResponse, fakeBidRequests);
+      const bidResponses = spec.interpretResponse(fakeServerResponse, fakeBidRequests);
       expect(bidResponses).deep.equal([fakeBidResult]);
     });
   });
@@ -148,8 +149,8 @@ describe('AppierAdapter', function () {
     it('should generate beacon URL for show callback', function() {
       spec.onBidWon(fakeBid);
 
-      let beaconUrl = spec.generateShowCallbackUrl('test_hzid', '0.20', 'TWD');
-      let imgTag = '<img src="' + beaconUrl + '">';
+      const beaconUrl = spec.generateShowCallbackUrl('test_hzid', '0.20', 'TWD');
+      const imgTag = `<img src="${beaconUrl}">`;
 
       expect(fakeBid.ad).contains(imgTag);
     });
@@ -157,11 +158,53 @@ describe('AppierAdapter', function () {
 
   describe('generateShowCallbackUrl', function() {
     it('should generate a show callback url passing cpm and currency', function() {
-      let beaconUrl = spec.generateShowCallbackUrl('test_hzid', '0.20', 'TWD');
+      const beaconUrl = spec.generateShowCallbackUrl('test_hzid', '0.20', 'TWD');
 
       expect(beaconUrl).matches(/hzid=test_hzid/);
       expect(beaconUrl).matches(/cpm=0.20/);
       expect(beaconUrl).matches(/currency=TWD/);
+    });
+  });
+
+  describe('getApiServer', function() {
+    it('should use the server specified by setConfig(appier.server)', function() {
+      config.setConfig({
+        'appier': {'server': 'fake_server'}
+      });
+
+      const server = spec.getApiServer();
+
+      expect(server).equals('fake_server');
+    });
+
+    it('should retrieve a farm specific hostname if server is not specpfied', function() {
+      config.setConfig({
+        'appier': {'farm': 'tw'}
+      });
+
+      const server = spec.getApiServer();
+
+      expect(server).equals(API_SERVERS_MAP['tw']);
+    });
+
+    it('if farm is not recognized, use the default farm', function() {
+      config.setConfig({
+        'appier': {'farm': 'no_this_farm'}
+      });
+
+      const server = spec.getApiServer();
+
+      expect(server).equals(API_SERVERS_MAP['default']);
+    });
+
+    it('if farm is not specified, use the default farm', function() {
+      config.setConfig({
+        'appier': {}
+      });
+
+      const server = spec.getApiServer();
+
+      expect(server).equals(API_SERVERS_MAP['default']);
     });
   });
 });

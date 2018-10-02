@@ -1,9 +1,18 @@
 import { registerBidder } from 'src/adapters/bidderFactory';
 import { BANNER } from 'src/mediaTypes';
+import { config } from 'src/config';
 
 const SUPPORTED_AD_TYPES = [BANNER];
-const BIDDER_API_URL = '//pmp-stg-server.tw.appier.biz/v1/prebid/bid';
-const SHOW_CALLBACK_URL = '//pmp-stg-server.tw.appier.biz/v1/prebid/show_cb';
+
+// we have different servers for different regions / farms
+export const API_SERVERS_MAP = {
+  'default': 'ad2.apx.appier.net',
+  'tw': 'ad2.apx.appier.net',
+  'jp': 'ad-jp.apx.appier.net'
+};
+
+const BIDDER_API_ENDPOINT = '/v1/prebid/bid';
+const SHOW_CALLBACK_ENDPOINT = '/v1/prebid/show_cb';
 
 export const spec = {
   code: 'appier',
@@ -29,10 +38,11 @@ export const spec = {
     if (bidRequests.length === 0) {
       return [];
     }
-
+    const server = this.getApiServer();
+    const bidderApiUrl = `//${server}${BIDDER_API_ENDPOINT}`
     return [{
       method: 'POST',
-      url: BIDDER_API_URL,
+      url: bidderApiUrl,
       data: bidRequests,
       // keep the bidder request object for later use
       bidderRequest: bidderRequest
@@ -50,7 +60,7 @@ export const spec = {
       return [];
     }
     // server response body is an array of bid results
-    let bidResults = serverResponse.body;
+    const bidResults = serverResponse.body;
     // our server directly returns the format needed by prebid.js so no more
     // transformation is needed here.
     return bidResults;
@@ -61,16 +71,34 @@ export const spec = {
    * @param {Bid} The bid that won the auction
    */
   onBidWon: function(bid) {
-    let hzid = bid.appierParams.hzid;
-    let cpm = bid.adserverTargeting.hb_pb;
-    let currency = bid.currency;
-    let showCallbackUrl = this.generateShowCallbackUrl(hzid, cpm, currency);
+    const hzid = bid.appierParams.hzid;
+    const cpm = bid.adserverTargeting.hb_pb;
+    const currency = bid.currency;
+    const showCallbackUrl = this.generateShowCallbackUrl(hzid, cpm, currency);
     // add the image beacon to creative html
-    bid.ad += '<img src="' + showCallbackUrl + '">';
+    bid.ad += `<img src="${showCallbackUrl}">`;
   },
 
+  /**
+   * Generate a show callback beacon image URL
+   */
   generateShowCallbackUrl(hzid, cpm, currency) {
-    return SHOW_CALLBACK_URL + '?hzid=' + hzid + '&cpm=' + cpm + '&currency=' + currency;
+    const server = this.getApiServer();
+    return `//${server}${SHOW_CALLBACK_ENDPOINT}?hzid=${hzid}&cpm=${cpm}&currency=${currency}`;
+  },
+
+  /**
+   * Get the hostname of the server we want to use.
+   */
+  getApiServer() {
+    // we may use different servers for different farms (geographical regions)
+    // if a server is specified explicitly, use it. otherwise, use farm specific server.
+    let server = config.getConfig('appier.server');
+    if (!server) {
+      const farm = config.getConfig('appier.farm');
+      server = API_SERVERS_MAP[farm] || API_SERVERS_MAP['default'];
+    }
+    return server;
   }
 };
 
